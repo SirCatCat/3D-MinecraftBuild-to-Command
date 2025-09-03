@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Relative Builder</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #0a0a0a;
+            color: #f0f0f0;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        header {
+            padding: 12px 16px;
+            background-color: #111;
+            border-bottom: 1px solid #333;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .mode-buttons {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+        
+        button {
+            padding: 6px 12px;
+            border-radius: 16px;
+            border: 1px solid #444;
+            background-color: #222;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background-color: #333;
+        }
+        
+        button.active {
+            background-color: #4a4a4a;
+            color: #fff;
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .canvas-container {
+            flex: 2;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .layer-indicator {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            background-color: rgba(17, 17, 17, 0.8);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            border: 1px solid #333;
+        }
+        
+        .sidebar {
+            flex: 1;
+            max-width: 400px;
+            background-color: #111;
+            border-left: 1px solid #333;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        label {
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+        
+        input, select, textarea {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background-color: #222;
+            color: #fff;
+            outline: none;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            border-color: #555;
+        }
+        
+        input[type="color"] {
+            height: 40px;
+            padding: 2px;
+        }
+        
+        .palette {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .palette-item {
+            padding: 4px 8px;
+            border-radius: 16px;
+            background-color: #222;
+            border: 1px solid #333;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        
+        .palette-item.active {
+            background-color: #4a4a4a;
+        }
+        
+        .grid-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        
+        .player-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        
+        .commands-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .command-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+        
+        .help-summary {
+            cursor: pointer;
+            margin-top: 8px;
+            color: #aaa;
+        }
+        
+        .help-content {
+            margin-top: 8px;
+            padding: 8px;
+            background-color: #1a1a1a;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #999;
+        }
+        
+        .help-content ul {
+            padding-left: 20px;
+            margin-top: 8px;
+        }
+        
+        .help-content li {
+            margin-bottom: 4px;
+        }
+        
+        code {
+            background-color: #222;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Minecraft Relative Builder</h1>
+            <div class="mode-buttons">
+                <button id="placeMode" class="active">Place</button>
+                <button id="eraseMode">Erase</button>
+                <button id="playerMode">Set Player</button>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <div class="canvas-container">
+                <canvas id="renderCanvas"></canvas>
+                <div class="layer-indicator">
+                    Layer Y: <span id="currentLayerDisplay">0</span>
+                </div>
+            </div>
+            
+            <div class="sidebar">
+                <div class="form-group">
+                    <label for="blockType">Block Type</label>
+                    <input type="text" id="blockType" value="stone" placeholder="e.g. stone or table">
+                </div>
+                
+                <div class="form-group">
+                    <label for="blockColor">Color (preview only)</label>
+                    <input type="color" id="blockColor" value="#aaaaaa">
+                </div>
+                
+                <div class="form-group">
+                    <label>Recently Used Block Types</label>
+                    <div id="palette" class="palette">
+                        <div class="palette-item active">stone</div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Grid Dimensions</label>
+                    <div class="grid-controls">
+                        <div class="form-group">
+                            <label for="gridX">X Half-width</label>
+                            <input type="number" id="gridX" value="16" min="1" max="64">
+                        </div>
+                        <div class="form-group">
+                            <label for="gridY">Y Height</label>
+                            <input type="number" id="gridY" value="16" min="1" max="64">
+                        </div>
+                        <div class="form-group">
+                            <label for="gridZ">Z Half-width</label>
+                            <input type="number" id="gridZ" value="16" min="1" max="64">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="layerSlider">Active Layer (Y)</label>
+                    <input type="range" id="layerSlider" min="0" max="15" value="0">
+                    <span id="currentLayerValue">0</span>
+                </div>
+                
+                <div class="form-group">
+                    <label>Player Position</label>
+                    <div class="player-controls">
+                        <div class="form-group">
+                            <label for="playerX">X</label>
+                            <input type="number" id="playerX" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="playerY">Y</label>
+                            <input type="number" id="playerY" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="playerZ">Z</label>
+                            <input type="number" id="playerZ" value="0">
+                        </div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #777; margin-top: 4px;">
+                        Tip: Activate "Set Player" mode and click in the grid.
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="useFill" checked>
+                        Use /fill where possible
+                    </label>
+                </div>
+                
+                <button id="generateCommands">Generate Commands</button>
+                
+                <div class="commands-section">
+                    <label for="commandsOutput">Commands (relative to player position)</label>
+                    <textarea id="commandsOutput"></textarea>
+                    <div class="command-buttons">
+                        <button id="copyCommands">Copy</button>
+                        <button id="clearCommands">Clear</button>
+                        <button id="clearAllBlocks">Clear All Blocks</button>
+                    </div>
+                </div>
+                
+                <details class="help-summary">
+                    <summary>How it works (Summary)</summary>
+                    <div class="help-content">
+                        <ul>
+                            <li>Place blocks in the 3D grid. Color is only visual - enter the actual block name above (e.g. <code>stone</code> or even fictional ones like <code>table</code>).</li>
+                            <li>Set the player position. When exporting, all coordinates will be relative using <code>~</code> notation.</li>
+                            <li>"Use /fill" compresses contiguous cuboids of the same block type into a single command.</li>
+                            <li>Right-click on a palette button to remove it.</li>
+                        </ul>
+                    </div>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Utility functions
+        function keyFrom(x, y, z) {
+            return `${x},${y},${z}`;
+        }
+
+        function parseKey(k) {
+            return k.split(',').map(Number);
+        }
+
+        function rel(n) {
+            if (n === 0) return "~";
+            return `~${n}`;
+        }
+
+        function clamp(v, min, max) {
+            return Math.max(min, Math.min(max, v));
+        }
+
+        // Greedy 3D cuboid merge to compress into /fill where possible.
+        function compressToCuboids(blocksMap) {
+            if (blocksMap.size === 0) return [];
+            
+            const coords = Array.from(blocksMap.keys()).map(parseKey);
+            const xs = [...new Set(coords.map(c => c[0]))].sort((a, b) => a - b);
+            const ys = [...new Set(coords.map(c => c[1]))].sort((a, b) => a - b);
+            const zs = [...new Set(coords.map(c => c[2]))].sort((a, b) => a - b);
+            
+            const minX = xs[0], maxX = xs[xs.length - 1];
+            const minY = ys[0], maxY = ys[ys.length - 1];
+            const minZ = zs[0], maxZ = zs[zs.length - 1];
+
+            const get = (x, y, z) => blocksMap.get(keyFrom(x, y, z));
+            const visited = new Set();
+            const out = [];
+
+            for (let y = minY; y <= maxY; y++) {
+                for (let z = minZ; z <= maxZ; z++) {
+                    for (let x = minX; x <= maxX; x++) {
+                        const k = keyFrom(x, y, z);
+                        if (visited.has(k)) continue;
+                        
+                        const cell = blocksMap.get(k);
+                        if (!cell) continue;
+                        
+                        const type = cell.type;
+                        
+                        // Expand in +x
+                        let x2 = x;
+                        while (true) {
+                            const nx = x2 + 1;
+                            const nk = keyFrom(nx, y, z);
+                            const ncell = blocksMap.get(nk);
+                            if (!ncell || ncell.type !== type || visited.has(nk)) break;
+                            x2 = nx;
+                        }
+                        
+                        // Expand in +z for the x-range
+                        let z2 = z;
+                        outerZ: while (true) {
+                            const nz = z2 + 1;
+                            for (let xi = x; xi <= x2; xi++) {
+                                const ck = keyFrom(xi, y, nz);
+                                const cc = blocksMap.get(ck);
+                                if (!cc || cc.type !== type || visited.has(ck)) break outerZ;
+                            }
+                            z2 = nz;
+                        }
+                        
+                        // Expand in +y for the x-z rectangle
+                        let y2 = y;
+                        outerY: while (true) {
+                            const ny = y2 + 1;
+                            for (let zi = z; zi <= z2; zi++) {
+                                for (let xi = x; xi <= x2; xi++) {
+                                    const ck = keyFrom(xi, ny, zi);
+                                    const cc = blocksMap.get(ck);
+                                    if (!cc || cc.type !== type || visited.has(ck)) break outerY;
+                                }
+                            }
+                            y2 = ny;
+                        }
+                        
+                        // Mark visited
+                        for (let yi = y; yi <= y2; yi++) {
+                            for (let zi = z; zi <= z2; zi++) {
+                                for (let xi = x; xi <= x2; xi++) {
+                                    visited.add(keyFrom(xi, yi, zi));
+                                }
+                            }
+                        }
+                        
+                        out.push({ x1: x, y1: y, z1: z, x2, y2, z2, type });
+                    }
+                }
+            }
+            
+            return out;
+        }
+
+        function generateCommands(blocksMap, playerPos, useFill) {
+            if (blocksMap.size === 0) return [];
+            
+            const commands = [];
+            
+            if (useFill) {
+                const cuboids = compressToCuboids(blocksMap);
+                for (const c of cuboids) {
+                    const dx1 = c.x1 - playerPos.x;
+                    const dy1 = c.y1 - playerPos.y;
+                    const dz1 = c.z1 - playerPos.z;
+                    const dx2 = c.x2 - playerPos.x;
+                    const dy2 = c.y2 - playerPos.y;
+                    const dz2 = c.z2 - playerPos.z;
+                    
+                    commands.push(`/fill ${rel(dx1)} ${rel(dy1)} ${rel(dz1)} ${rel(dx2)} ${rel(dy2)} ${rel(dz2)} ${c.type}`);
+                }
+            } else {
+                for (const [k, v] of blocksMap.entries()) {
+                    const [x, y, z] = parseKey(k);
+                    const dx = x - playerPos.x;
+                    const dy = y - playerPos.y;
+                    const dz = z - playerPos.z;
+                    
+                    commands.push(`/setblock ${rel(dx)} ${rel(dy)} ${rel(dz)} ${v.type}`);
+                }
+            }
+            
+            return commands;
+        }
+
+        // Main application
+        let scene, camera, renderer, controls;
+        let gridHelper, blocksGroup, playerMarker, hoverIndicator;
+        
+        let gridSize = [16, 16, 16];
+        let currentLayer = 0;
+        let blocksMap = new Map();
+        let selectedType = 'stone';
+        let selectedColor = '#aaaaaa';
+        let palette = ['stone'];
+        let mode = 'place'; // place | erase | player
+        let playerPos = { x: 0, y: 0, z: 0 };
+        let useFill = true;
+        
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let hoverPoint = null;
+        
+        // Initialize Three.js scene
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(24, 24, 24);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('renderCanvas'), antialias: true });
+            renderer.setSize(document.querySelector('.canvas-container').offsetWidth, document.querySelector('.canvas-container').offsetHeight);
+            renderer.shadowMap.enabled = true;
+            
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+            
+            // Add orbit controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            
+            // Create grid
+            updateGrid();
+            
+            // Create blocks group
+            blocksGroup = new THREE.Group();
+            scene.add(blocksGroup);
+            
+            // Create player marker
+            const playerGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 0.8 });
+            playerMarker = new THREE.Mesh(playerGeometry, playerMaterial);
+            scene.add(playerMarker);
+            updatePlayerPosition();
+            
+            // Create hover indicator
+            const hoverGeometry = new THREE.BoxGeometry(1.02, 1.02, 1.02);
+            const hoverMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+            hoverIndicator = new THREE.Mesh(hoverGeometry, hoverMaterial);
+            hoverIndicator.visible = false;
+            scene.add(hoverIndicator);
+            
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('mousemove', onMouseMove);
+            renderer.domElement.addEventListener('click', onClick);
+            
+            // UI event listeners
+            document.getElementById('placeMode').addEventListener('click', () => setMode('place'));
+            document.getElementById('eraseMode').addEventListener('click', () => setMode('erase'));
+            document.getElementById('playerMode').addEventListener('click', () => setMode('player'));
+            
+            document.getElementById('blockType').addEventListener('change', (e) => {
+                selectedType = e.target.value;
+            });
+            
+            document.getElementById('blockColor').addEventListener('change', (e) => {
+                selectedColor = e.target.value;
+            });
+            
+            document.getElementById('gridX').addEventListener('change', updateGridSize);
+            document.getElementById('gridY').addEventListener('change', updateGridSize);
+            document.getElementById('gridZ').addEventListener('change', updateGridSize);
+            
+            document.getElementById('layerSlider').addEventListener('input', (e) => {
+                currentLayer = parseInt(e.target.value);
+                document.getElementById('currentLayerValue').textContent = currentLayer;
+                document.getElementById('currentLayerDisplay').textContent = currentLayer;
+            });
+            
+            document.getElementById('playerX').addEventListener('change', (e) => {
+                playerPos.x = parseInt(e.target.value);
+                updatePlayerPosition();
+            });
+            
+            document.getElementById('playerY').addEventListener('change', (e) => {
+                playerPos.y = parseInt(e.target.value);
+                updatePlayerPosition();
+            });
+            
+            document.getElementById('playerZ').addEventListener('change', (e) => {
+                playerPos.z = parseInt(e.target.value);
+                updatePlayerPosition();
+            });
+            
+            document.getElementById('useFill').addEventListener('change', (e) => {
+                useFill = e.target.checked;
+            });
+            
+            document.getElementById('generateCommands').addEventListener('click', generateCommandsHandler);
+            document.getElementById('copyCommands').addEventListener('click', copyCommands);
+            document.getElementById('clearCommands').addEventListener('click', () => {
+                document.getElementById('commandsOutput').value = '';
+            });
+            
+            document.getElementById('clearAllBlocks').addEventListener('click', () => {
+                blocksMap.clear();
+                updateBlocks();
+            });
+            
+            // Start animation loop
+            animate();
+        }
+        
+        function setMode(newMode) {
+            mode = newMode;
+            
+            // Update UI
+            document.getElementById('placeMode').classList.toggle('active', newMode === 'place');
+            document.getElementById('eraseMode').classList.toggle('active', newMode === 'erase');
+            document.getElementById('playerMode').classList.toggle('active', newMode === 'player');
+        }
+        
+        function updateGrid() {
+            if (gridHelper) {
+                scene.remove(gridHelper);
+            }
+            
+            const [sx, sy, sz] = gridSize;
+            gridHelper = new THREE.GridHelper(Math.max(sx, sz) * 2, Math.max(sx, sz) * 2, 0x444444, 0x222222);
+            gridHelper.position.y = -0.01; // Slightly below zero to avoid z-fighting
+            scene.add(gridHelper);
+            
+            // Update layer slider max value
+            const layerSlider = document.getElementById('layerSlider');
+            layerSlider.max = sy - 1;
+            if (currentLayer >= sy) {
+                currentLayer = sy - 1;
+                layerSlider.value = currentLayer;
+                document.getElementById('currentLayerValue').textContent = currentLayer;
+                document.getElementById('currentLayerDisplay').textContent = currentLayer;
+            }
+        }
+        
+        function updateGridSize() {
+            const x = parseInt(document.getElementById('gridX').value);
+            const y = parseInt(document.getElementById('gridY').value);
+            const z = parseInt(document.getElementById('gridZ').value);
+            
+            gridSize = [x, y, z];
+            updateGrid();
+        }
+        
+        function updatePlayerPosition() {
+            playerMarker.position.set(playerPos.x + 0.5, playerPos.y + 0.5, playerPos.z + 0.5);
+            
+            // Update UI
+            document.getElementById('playerX').value = playerPos.x;
+            document.getElementById('playerY').value = playerPos.y;
+            document.getElementById('playerZ').value = playerPos.z;
+        }
+        
+        function updateBlocks() {
+            // Clear existing blocks
+            while (blocksGroup.children.length > 0) {
+                blocksGroup.remove(blocksGroup.children[0]);
+            }
+            
+            // Add blocks from map
+            for (const [key, block] of blocksMap.entries()) {
+                const [x, y, z] = parseKey(key);
+                
+                const geometry = new THREE.BoxGeometry(1, 1, 1);
+                const material = new THREE.MeshStandardMaterial({ 
+                    color: new THREE.Color(block.color),
+                    metalness: 0.3,
+                    roughness: 0.7
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+                
+                blocksGroup.add(mesh);
+            }
+        }
+        
+        function addToPalette(type) {
+            if (!palette.includes(type)) {
+                palette.unshift(type);
+                if (palette.length > 20) palette.pop();
+                
+                updatePaletteUI();
+            }
+        }
+        
+        function updatePaletteUI() {
+            const paletteEl = document.getElementById('palette');
+            paletteEl.innerHTML = '';
+            
+            for (const type of palette) {
+                const item = document.createElement('div');
+                item.className = `palette-item ${type === selectedType ? 'active' : ''}`;
+                item.textContent = type;
+                item.addEventListener('click', () => {
+                    selectedType = type;
+                    document.getElementById('blockType').value = type;
+                    updatePaletteUI();
+                });
+                
+                item.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    palette = palette.filter(t => t !== type);
+                    updatePaletteUI();
+                });
+                
+                paletteEl.appendChild(item);
+            }
+        }
+        
+        function onWindowResize() {
+            const container = document.querySelector('.canvas-container');
+            camera.aspect = container.offsetWidth / container.offsetHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.offsetWidth, container.offsetHeight);
+        }
+        
+        function onMouseMove(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            // Raycast to find intersection with the current layer plane
+            raycaster.setFromCamera(mouse, camera);
+            
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -currentLayer);
+            const intersectionPoint = new THREE.Vector3();
+            const intersects = raycaster.ray.intersectPlane(plane, intersectionPoint);
+            
+            if (intersects) {
+                const x = Math.floor(intersectionPoint.x);
+                const z = Math.floor(intersectionPoint.z);
+                
+                hoverPoint = { x, y: currentLayer, z };
+                hoverIndicator.position.set(x + 0.5, currentLayer + 0.5, z + 0.5);
+                hoverIndicator.visible = true;
+            } else {
+                hoverIndicator.visible = false;
+            }
+        }
+        
+        function onClick(event) {
+            if (!hoverPoint) return;
+            
+            const { x, y, z } = hoverPoint;
+            const [sx, sy, sz] = gridSize;
+            
+            // Check if point is within grid bounds
+            if (x < -sx || x >= sx || z < -sz || z >= sz || y < 0 || y >= sy) return;
+            
+            if (mode === 'player') {
+                playerPos = { x, y, z };
+                updatePlayerPosition();
+                return;
+            }
+            
+            const key = keyFrom(x, y, z);
+            
+            if (mode === 'erase') {
+                blocksMap.delete(key);
+            } else if (mode === 'place') {
+                const type = selectedType.trim() || 'stone';
+                blocksMap.set(key, { type, color: selectedColor });
+                addToPalette(type);
+            }
+            
+            updateBlocks();
+        }
+        
+        function generateCommandsHandler() {
+            const commands = generateCommands(blocksMap, playerPos, useFill);
+            document.getElementById('commandsOutput').value = commands.join('\n');
+        }
+        
+        function copyCommands() {
+            const commandsText = document.getElementById('commandsOutput');
+            commandsText.select();
+            document.execCommand('copy');
+            alert('Commands copied to clipboard.');
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize the application
+        init();
+        updatePaletteUI();
+    </script>
+</body>
+</html>
